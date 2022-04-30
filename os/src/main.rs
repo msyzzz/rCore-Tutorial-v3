@@ -9,17 +9,14 @@
 
 #![no_std]
 #![no_main]
+#![deny(missing_docs)]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 
 use core::arch::global_asm;
 use core::hint::spin_loop;
 use core::sync::atomic::{Ordering, AtomicBool, AtomicUsize};
-
-use config::CPU_NUM;
-
-use crate::config::FIRST_CPU;
-
+use config::{CPU_NUM, FIRST_CPU};
 
 #[macro_use]
 mod console;
@@ -45,7 +42,6 @@ pub fn clear_bss() {
     (sbss as usize..ebss as usize).for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
 }
 
-// boot in order
 /// the rust entry-point of os
 #[no_mangle]
 pub fn rust_main() -> ! {
@@ -95,6 +91,7 @@ pub fn rust_main() -> ! {
     }
 }
 
+/// check FIRST_CPU
 pub fn first_booted(cpu_id: usize) -> bool {
     if cpu_id == FIRST_CPU {
         FIRST_BOOT.compare_exchange(false, true, Ordering::Release, Ordering::Relaxed).unwrap();
@@ -104,10 +101,12 @@ pub fn first_booted(cpu_id: usize) -> bool {
     }
 }
 
+/// count booted cpu
 pub fn boot_finish() {
     BOOTED_CPU_NUM.fetch_add(1, Ordering::Relaxed);
 }
 
+/// check ALL booted
 pub fn all_booted() -> bool {
     BOOTED_CPU_NUM.load(Ordering::Relaxed) == CPU_NUM
 }

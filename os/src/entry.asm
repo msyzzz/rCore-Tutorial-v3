@@ -12,7 +12,6 @@ _start:
     .section .bss.stack
     .globl boot_stack
 boot_stack:
-    .space 4096 * 16 * 4
-    #.space 64 * 1024 * 2    # 64 K/cores * 2
+    .space 1024 * 64 * 4    # 64 K/core
     .globl boot_stack_top
 boot_stack_top:
