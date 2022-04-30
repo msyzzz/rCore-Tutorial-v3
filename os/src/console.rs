@@ -2,7 +2,6 @@
 
 use crate::sbi::console_putchar;
 use core::fmt::{self, Write};
-use lock::Mutex;
 
 struct Stdout;
 
@@ -15,9 +14,7 @@ impl Write for Stdout {
     }
 }
 
-// lazy_static::lazy_static! {
-//     static ref STDOUT: Mutex<Stdout> = Mutex::new(Stdout);
-// }
+//static STDOUT: Mutex<Stdout> = Mutex::new(Stdout);
 
 pub fn print(args: fmt::Arguments) {
     //STDOUT.lock().write_fmt(args).unwrap();

@@ -4,7 +4,7 @@ MODE := release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
-SMP ?= 2
+SMP ?= 4
 
 # Building mode argument
 ifeq ($(MODE), release)
