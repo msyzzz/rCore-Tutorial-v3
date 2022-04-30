@@ -10,6 +10,7 @@
 #![no_std]
 #![no_main]
 #![feature(panic_info_message)]
+#![feature(alloc_error_handler)]
 
 use core::arch::global_asm;
 use core::hint::spin_loop;
@@ -26,6 +27,7 @@ mod lang_items;
 mod sbi;
 mod harts;
 mod config;
+mod heap_allocator;
 
 global_asm!(include_str!("entry.asm"));
 
@@ -51,6 +53,7 @@ pub fn rust_main() -> ! {
     if cpu_id == FIRST_CPU{
         println!("I am FIRST CPU {:x}", cpu_id);
         clear_bss();
+        heap_allocator::init_heap();
         extern "C" {
             fn stext();               // begin addr of text segment
             fn etext();               // end addr of text segment
