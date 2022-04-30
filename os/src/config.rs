@@ -4,4 +4,4 @@
 pub const KERNEL_HEAP_SIZE: usize = 0x20000;
 
 pub const CPU_NUM: usize = 4;
-pub const FIRST_CPU: usize = 0;
+pub const CONTROL_CPU: usize = 0;

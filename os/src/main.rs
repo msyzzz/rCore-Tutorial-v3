@@ -16,7 +16,7 @@
 use core::arch::global_asm;
 use core::hint::spin_loop;
 use core::sync::atomic::{Ordering, AtomicBool, AtomicUsize};
-use config::{CPU_NUM, FIRST_CPU};
+use config::{CPU_NUM, CONTROL_CPU};
 
 #[macro_use]
 mod console;
@@ -30,6 +30,7 @@ global_asm!(include_str!("entry.asm"));
 
 
 static FIRST_BOOT: AtomicBool = AtomicBool::new(false);
+static GLOBAL_INIT: AtomicBool = AtomicBool::new(false);
 static BOOTED_CPU_NUM: AtomicUsize = AtomicUsize::new(0);
 
 
@@ -46,7 +47,8 @@ pub fn clear_bss() {
 #[no_mangle]
 pub fn rust_main() -> ! {
     let cpu_id = harts::id();
-    if cpu_id == FIRST_CPU{
+    // 选择最初的核来进行全局初始化
+    if select_as_first(){
         println!("I am FIRST CPU {:x}", cpu_id);
         clear_bss();
         heap_allocator::init_heap();
@@ -71,33 +73,32 @@ pub fn rust_main() -> ! {
             boot_stack as usize, boot_stack_top as usize
         );
         println!(".bss [{:#x}, {:#x})", sbss as usize, ebss as usize);
-        first_booted(cpu_id);
+        finish_global_init();
     }
-    else{
-        while !first_booted(cpu_id) {
-            spin_loop();
-        }
-    } 
-    boot_finish();
+    wait_global_init();
     println!("Hello world from CPU {:x}!", cpu_id);
-    while !all_booted() {
-        spin_loop();
-    }
-    if cpu_id == FIRST_CPU {
+    boot_finish();
+    wait_all_booted();
+    if cpu_id == CONTROL_CPU{
         panic!("Shutdown machine!");
     }
-    else {
-        loop{};
-    }
+    else { loop{} }
 }
 
-/// check FIRST_CPU
-pub fn first_booted(cpu_id: usize) -> bool {
-    if cpu_id == FIRST_CPU {
-        FIRST_BOOT.compare_exchange(false, true, Ordering::Release, Ordering::Relaxed).unwrap();
-        true
-    } else {
-        FIRST_BOOT.load(Ordering::Acquire)
+/// select FIRST_CPU
+pub fn select_as_first() -> bool {
+    FIRST_BOOT.compare_exchange(false, true, Ordering::Release, Ordering::Relaxed).is_ok()
+}
+
+/// FIRST_CPU finish global init
+pub fn finish_global_init() {
+    GLOBAL_INIT.store(true, Ordering::Relaxed)
+}
+
+/// wait until global init finished
+pub fn wait_global_init() {
+    while !GLOBAL_INIT.load(Ordering::Relaxed){
+        spin_loop();
     }
 }
 
@@ -106,7 +107,9 @@ pub fn boot_finish() {
     BOOTED_CPU_NUM.fetch_add(1, Ordering::Relaxed);
 }
 
-/// check ALL booted
-pub fn all_booted() -> bool {
-    BOOTED_CPU_NUM.load(Ordering::Relaxed) == CPU_NUM
+/// wait until ALL booted
+pub fn wait_all_booted() {
+    while !BOOTED_CPU_NUM.load(Ordering::Relaxed) == CPU_NUM{
+        spin_loop();
+    }
 }

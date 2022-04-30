@@ -2,7 +2,7 @@
 
 use crate::sbi::console_putchar;
 use core::fmt::{self, Write};
-use lock::Mutex;
+use spin::Mutex;
 
 struct Stdout;
 
