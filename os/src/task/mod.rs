@@ -15,7 +15,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::MAX_APP_NUM;
+use crate::config::{MAX_APP_NUM,CPU_NUM};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::harts::id;
 use lazy_static::*;
@@ -46,7 +46,7 @@ pub struct TaskManagerInner {
     /// task list
     tasks: [TaskControlBlock; MAX_APP_NUM],
     /// id of current `Running` task
-    current_task: [usize;4],
+    current_task: [usize; CPU_NUM],
     free_cpu: usize,
 }
 
@@ -67,7 +67,7 @@ lazy_static! {
             inner: {
                 Mutex::new(TaskManagerInner {
                     tasks,
-                    current_task: [0;4],
+                    current_task: [num_app - 1; CPU_NUM],  // 保证任务的执行顺序
                     free_cpu: 0,
                 })
             },
@@ -83,19 +83,16 @@ impl TaskManager {
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.lock();
         let cpu_id = id();
-        let mut first_task: usize = 0;
-        if cpu_id != 0{
-            if let Some(next) = self.find_next_task(&inner) {
-                first_task = next;
-                inner.current_task[cpu_id] = first_task;
-            }
-            else{
-                inner.free_cpu += 1;
-                println!("[kernel] cpu {} free",id());
-                drop(inner);
-                loop{};
-            }
+        if let Some(next) = self.find_next_task(&inner) {
+            inner.current_task[cpu_id] = next;
         }
+        else{
+            inner.free_cpu += 1;
+            println!("[kernel] cpu {} free",id());
+            drop(inner);
+            loop{};
+        }
+        let first_task = inner.current_task[cpu_id];
         // println!("[kernel] cpu{} run task {}",cpu_id,first_task);
         let task0 = &mut inner.tasks[first_task];
         task0.task_status = TaskStatus::Running;
@@ -109,21 +106,20 @@ impl TaskManager {
         panic!("unreachable in run_first_task!");
     }
 
-    /// Change the status of current `Running` task into `Ready`.
-    fn mark_current_suspended(&self) {
-        let mut inner = self.inner.lock();
-        let cpu_id = id();
-        let current = inner.current_task[cpu_id];
-        //println!("cpu {} suspend taks {}", cpu_id, current);
-        inner.tasks[current].task_status = TaskStatus::Ready;
-    }
-
-    /// Change the status of current `Running` task into `Exited`.
-    fn mark_current_exited(&self) {
-        let mut inner = self.inner.lock();
-        let current = inner.current_task[id()];
-        inner.tasks[current].task_status = TaskStatus::Exited;
-    }
+    // /// Change the status of current `Running` task into `Ready`.
+    // fn mark_current_suspended(&self) {
+    //     let mut inner = self.inner.lock();
+    //     let cpu_id = id();
+    //     let current = inner.current_task[cpu_id];
+    //     inner.tasks[current].task_status = TaskStatus::Ready;
+    // }
+    //
+    // /// Change the status of current `Running` task into `Exited`.
+    // fn mark_current_exited(&self) {
+    //     let mut inner = self.inner.lock();
+    //     let current = inner.current_task[id()];
+    //     inner.tasks[current].task_status = TaskStatus::Exited;
+    // }
 
     /// Find next task to run and return task id.
     ///
@@ -138,11 +134,13 @@ impl TaskManager {
 
     /// Switch current `Running` task to the task we have found,
     /// or there is no `Ready` task and we can exit with all applications completed
-    fn run_next_task(&self) {
+    fn run_next_task(&self, status:TaskStatus) {
         let mut inner = self.inner.lock();
+        let cpu_id = id();
+        let current = inner.current_task[cpu_id];
+        inner.tasks[current].task_status = status;
         if let Some(next) = self.find_next_task(&inner) {
-            let cpu_id = id();
-            // println!("[kernel] cpu{} run task {}",cpu_id,next);
+            //println!("[kernel] cpu{} run task {}",cpu_id,next);
             let current = inner.current_task[cpu_id];
             inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task[cpu_id] = next;
@@ -158,7 +156,7 @@ impl TaskManager {
             // let mut inner = self.inner.lock();
             inner.free_cpu += 1;
             println!("[kernel] cpu {} free",id());
-            if inner.free_cpu == 4{
+            if inner.free_cpu == CPU_NUM{
                 panic!("All applications completed!");
             }
             else {
@@ -175,29 +173,32 @@ pub fn run_first_task() {
     TASK_MANAGER.run_first_task();
 }
 
-/// rust next task
-fn run_next_task() {
-    TASK_MANAGER.run_next_task();
-}
+// /// rust next task
+// fn run_next_task() {
+//     TASK_MANAGER.run_next_task();
+// }
+//
+// /// suspend current task
+// fn mark_current_suspended() {
+//     TASK_MANAGER.mark_current_suspended();
+// }
+//
+// /// exit current task
+// fn mark_current_exited() {
+//     TASK_MANAGER.mark_current_exited();
+// }
 
-/// suspend current task
-fn mark_current_suspended() {
-    TASK_MANAGER.mark_current_suspended();
-}
-
-/// exit current task
-fn mark_current_exited() {
-    TASK_MANAGER.mark_current_exited();
+/// mark current task with status
+fn mark_current_and_run_next(status: TaskStatus) {
+    TASK_MANAGER.run_next_task(status);
 }
 
 /// suspend current task, then run next task
 pub fn suspend_current_and_run_next() {
-    mark_current_suspended();
-    run_next_task();
+    mark_current_and_run_next(TaskStatus::Ready);
 }
 
 /// exit current task,  then run next task
 pub fn exit_current_and_run_next() {
-    mark_current_exited();
-    run_next_task();
+    mark_current_and_run_next(TaskStatus::Exited);
 }
