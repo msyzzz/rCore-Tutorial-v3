@@ -13,8 +13,11 @@
 
 use core::arch::global_asm;
 use core::hint::spin_loop;
-extern crate lazy_static;
 use core::sync::atomic::{Ordering, AtomicBool, AtomicUsize};
+
+use config::CPU_NUM;
+
+use crate::config::FIRST_CPU;
 
 
 #[macro_use]
@@ -26,11 +29,9 @@ mod config;
 
 global_asm!(include_str!("entry.asm"));
 
-lazy_static::lazy_static! {
-    static ref BOOTED_CPU_NUM: AtomicUsize = AtomicUsize::new(0);
-}
 
 static FIRST_BOOT: AtomicBool = AtomicBool::new(false);
+static BOOTED_CPU_NUM: AtomicUsize = AtomicUsize::new(0);
 
 
 /// clear BSS segment
@@ -47,8 +48,8 @@ pub fn clear_bss() {
 #[no_mangle]
 pub fn rust_main() -> ! {
     let cpu_id = harts::id();
-    if cpu_id == 0{
-        println!("I AM CPU {:x}", cpu_id);
+    if cpu_id == FIRST_CPU{
+        println!("I am FIRST CPU {:x}", cpu_id);
         clear_bss();
         extern "C" {
             fn stext();               // begin addr of text segment
@@ -78,12 +79,12 @@ pub fn rust_main() -> ! {
             spin_loop();
         }
     } 
-    println!("Hello world from CPU {:x}!", cpu_id);
     boot_finish();
+    println!("Hello world from CPU {:x}!", cpu_id);
     while !all_booted() {
         spin_loop();
     }
-    if cpu_id == 0 {
+    if cpu_id == FIRST_CPU {
         panic!("Shutdown machine!");
     }
     else {
@@ -92,7 +93,7 @@ pub fn rust_main() -> ! {
 }
 
 pub fn first_booted(cpu_id: usize) -> bool {
-    if cpu_id == 0 {
+    if cpu_id == FIRST_CPU {
         FIRST_BOOT.compare_exchange(false, true, Ordering::Release, Ordering::Relaxed).unwrap();
         true
     } else {
@@ -105,5 +106,5 @@ pub fn boot_finish() {
 }
 
 pub fn all_booted() -> bool {
-    BOOTED_CPU_NUM.load(Ordering::Relaxed) == 4
+    BOOTED_CPU_NUM.load(Ordering::Relaxed) == CPU_NUM
 }
