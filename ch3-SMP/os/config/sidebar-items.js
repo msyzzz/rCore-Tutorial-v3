@@ -1,0 +1,1 @@
+initSidebarItems({"constant":[["APP_BASE_ADDRESS",""],["APP_SIZE_LIMIT",""],["CPU_NUM",""],["FIRST_CPU",""],["KERNEL_HEAP_SIZE",""],["KERNEL_STACK_SIZE",""],["MAX_APP_NUM",""],["USER_STACK_SIZE",""]]});
