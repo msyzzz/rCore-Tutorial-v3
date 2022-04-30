@@ -16,4 +16,4 @@ pub const CLOCK_FREQ: usize = 12500000;
 pub use crate::board::CLOCK_FREQ;
 
 pub const CPU_NUM: usize = 4;
-pub const CONTROL_CPU: usize = 0;
+//pub const CONTROL_CPU: usize = 0;

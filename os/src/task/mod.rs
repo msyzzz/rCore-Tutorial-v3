@@ -17,8 +17,9 @@ mod task;
 
 use crate::config::MAX_APP_NUM;
 use crate::loader::{get_num_app, init_app_cx};
-use crate::sync::UPSafeCell;
+use crate::harts::id;
 use lazy_static::*;
+use spin::Mutex;
 use switch::__switch;
 use task::{TaskControlBlock, TaskStatus};
 
@@ -37,7 +38,7 @@ pub struct TaskManager {
     /// total number of tasks
     num_app: usize,
     /// use inner value to get mutable access
-    inner: UPSafeCell<TaskManagerInner>,
+    inner: Mutex<TaskManagerInner>,
 }
 
 /// Inner of Task Manager
@@ -45,7 +46,8 @@ pub struct TaskManagerInner {
     /// task list
     tasks: [TaskControlBlock; MAX_APP_NUM],
     /// id of current `Running` task
-    current_task: usize,
+    current_task: [usize;4],
+    free_cpu: usize,
 }
 
 lazy_static! {
@@ -62,10 +64,11 @@ lazy_static! {
         }
         TaskManager {
             num_app,
-            inner: unsafe {
-                UPSafeCell::new(TaskManagerInner {
+            inner: {
+                Mutex::new(TaskManagerInner {
                     tasks,
-                    current_task: 0,
+                    current_task: [0;4],
+                    free_cpu: 0,
                 })
             },
         }
@@ -78,8 +81,23 @@ impl TaskManager {
     /// Generally, the first task in task list is an idle task (we call it zero process later).
     /// But in ch3, we load apps statically, so the first task is a real app.
     fn run_first_task(&self) -> ! {
-        let mut inner = self.inner.exclusive_access();
-        let task0 = &mut inner.tasks[0];
+        let mut inner = self.inner.lock();
+        let cpu_id = id();
+        let mut first_task: usize = 0;
+        if cpu_id != 0{
+            if let Some(next) = self.find_next_task(&inner) {
+                first_task = next;
+                inner.current_task[cpu_id] = first_task;
+            }
+            else{
+                inner.free_cpu += 1;
+                println!("[kernel] cpu {} free",id());
+                drop(inner);
+                loop{};
+            }
+        }
+        // println!("[kernel] cpu{} run task {}",cpu_id,first_task);
+        let task0 = &mut inner.tasks[first_task];
         task0.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
         drop(inner);
@@ -93,24 +111,26 @@ impl TaskManager {
 
     /// Change the status of current `Running` task into `Ready`.
     fn mark_current_suspended(&self) {
-        let mut inner = self.inner.exclusive_access();
-        let current = inner.current_task;
+        let mut inner = self.inner.lock();
+        let cpu_id = id();
+        let current = inner.current_task[cpu_id];
+        //println!("cpu {} suspend taks {}", cpu_id, current);
         inner.tasks[current].task_status = TaskStatus::Ready;
     }
 
     /// Change the status of current `Running` task into `Exited`.
     fn mark_current_exited(&self) {
-        let mut inner = self.inner.exclusive_access();
-        let current = inner.current_task;
+        let mut inner = self.inner.lock();
+        let current = inner.current_task[id()];
         inner.tasks[current].task_status = TaskStatus::Exited;
     }
 
     /// Find next task to run and return task id.
     ///
     /// In this case, we only return the first `Ready` task in task list.
-    fn find_next_task(&self) -> Option<usize> {
-        let inner = self.inner.exclusive_access();
-        let current = inner.current_task;
+    fn find_next_task(&self, inner: &TaskManagerInner) -> Option<usize> {
+        // let inner = self.inner.lock();
+        let current = inner.current_task[id()];
         (current + 1..current + self.num_app + 1)
             .map(|id| id % self.num_app)
             .find(|id| inner.tasks[*id].task_status == TaskStatus::Ready)
@@ -119,11 +139,13 @@ impl TaskManager {
     /// Switch current `Running` task to the task we have found,
     /// or there is no `Ready` task and we can exit with all applications completed
     fn run_next_task(&self) {
-        if let Some(next) = self.find_next_task() {
-            let mut inner = self.inner.exclusive_access();
-            let current = inner.current_task;
+        let mut inner = self.inner.lock();
+        if let Some(next) = self.find_next_task(&inner) {
+            let cpu_id = id();
+            // println!("[kernel] cpu{} run task {}",cpu_id,next);
+            let current = inner.current_task[cpu_id];
             inner.tasks[next].task_status = TaskStatus::Running;
-            inner.current_task = next;
+            inner.current_task[cpu_id] = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
             drop(inner);
@@ -132,9 +154,19 @@ impl TaskManager {
                 __switch(current_task_cx_ptr, next_task_cx_ptr);
             }
             // go back to user mode
-        } else {
-            panic!("All applications completed!");
+        } else{
+            // let mut inner = self.inner.lock();
+            inner.free_cpu += 1;
+            println!("[kernel] cpu {} free",id());
+            if inner.free_cpu == 4{
+                panic!("All applications completed!");
+            }
+            else {
+                drop(inner);
+                loop{};
+            }
         }
+
     }
 }
 

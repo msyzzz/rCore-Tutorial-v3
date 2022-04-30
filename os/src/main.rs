@@ -24,7 +24,7 @@
 use core::arch::global_asm;
 use core::hint::spin_loop;
 use core::sync::atomic::{Ordering, AtomicBool, AtomicUsize};
-use config::{CPU_NUM, CONTROL_CPU};
+use config::{CPU_NUM};
 
 #[cfg(feature = "board_k210")]
 #[path = "boards/k210.rs"]
@@ -39,7 +39,6 @@ mod loader;
 mod sbi;
 mod harts;
 mod config;
-mod sync;
 pub mod syscall;
 pub mod task;
 mod timer;
@@ -73,23 +72,18 @@ pub fn rust_main() -> ! {
     // 选择最初的核来进行全局初始化
     if select_as_first(){
         clear_bss();
-        println!("[kernel] Hello, world!");
-        trap::init();
         loader::load_apps();
-        trap::enable_timer_interrupt();
-        timer::set_next_trigger();
-        task::run_first_task();
-        panic!("Unreachable in rust_main!");
         finish_global_init();
     }
     wait_global_init();
+    trap::init();
+    trap::enable_timer_interrupt();
+    timer::set_next_trigger();
     println!("Hello world from CPU {:x}!", cpu_id);
     boot_finish();
     wait_all_booted();
-    if cpu_id == CONTROL_CPU{
-        panic!("Shutdown machine!");
-    }
-    else { loop{} }
+    task::run_first_task();
+    panic!("unreachable")
 }
 
 /// select FIRST_CPU
