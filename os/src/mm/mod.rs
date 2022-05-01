@@ -21,9 +21,14 @@ pub use memory_set::{MapPermission, MemorySet, KERNEL_SPACE};
 pub use page_table::{translated_byte_buffer, PageTableEntry};
 use page_table::{PTEFlags, PageTable};
 
-/// initiate heap allocator, frame allocator and kernel space
-pub fn init() {
+/// initiate heap allocator, frame allocator
+pub fn allocator_init() {
     heap_allocator::init_heap();
     frame_allocator::init_frame_allocator();
+    KERNEL_SPACE.exclusive_access().activate();
+}
+
+/// initiate kernel space
+pub fn kernel_space_init() {
     KERNEL_SPACE.exclusive_access().activate();
 }

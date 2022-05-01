@@ -17,3 +17,6 @@ pub fn kernel_stack_position(app_id: usize) -> (usize, usize) {
 }
 
 pub use crate::board::CLOCK_FREQ;
+
+pub const CPU_NUM: usize = 1;
+//pub const CONTROL_CPU: usize = 0;
