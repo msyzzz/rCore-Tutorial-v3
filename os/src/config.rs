@@ -21,4 +21,4 @@ pub const CLOCK_FREQ: usize = 403000000 / 62;
 pub const CLOCK_FREQ: usize = 12500000;
 
 pub const CPU_NUM: usize = 1;
-//pub const CONTROL_CPU: usize = 0;
+pub const CONTROL_CPU: usize = 0;
