@@ -25,7 +25,7 @@
 use core::arch::global_asm;
 use core::hint::spin_loop;
 use core::sync::atomic::{Ordering, AtomicBool, AtomicUsize};
-use config::{CPU_NUM};
+use config::{CPU_NUM, CONTROL_CPU};
 extern crate alloc;
 
 #[macro_use]
@@ -53,11 +53,8 @@ pub mod trap;
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("link_app.S"));
 
-
-static FIRST_BOOT: AtomicBool = AtomicBool::new(false);
 static GLOBAL_INIT: AtomicBool = AtomicBool::new(false);
 static BOOTED_CPU_NUM: AtomicUsize = AtomicUsize::new(0);
-
 
 /// clear BSS segment
 fn clear_bss() {
@@ -76,7 +73,8 @@ fn clear_bss() {
 pub fn rust_main() -> ! {
     let cpu_id = harts::id();
     // 选择最初的核来进行全局初始化
-    if select_as_first() {
+    if cpu_id == CONTROL_CPU{
+        println!("Global initialization start...");
         clear_bss();
         println!("[kernel] Hello, world!");
         mm::allocator_init();
@@ -94,11 +92,6 @@ pub fn rust_main() -> ! {
     wait_all_booted();
     task::run_first_task();
     panic!("unreachable")
-}
-
-/// select FIRST_CPU
-pub fn select_as_first() -> bool {
-    FIRST_BOOT.compare_exchange(false, true, Ordering::Release, Ordering::Relaxed).is_ok()
 }
 
 /// FIRST_CPU finish global init

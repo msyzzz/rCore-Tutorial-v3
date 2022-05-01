@@ -59,11 +59,11 @@ pub fn id() -> usize {
 
 即使系统变为了多核，我们的Rust函数仍然只有一个。这要求我们对于不同核要进行不同的行为设定，比如`clear_bss`之类的全局初始化只要求一个核来进行而其他核不要进行，在之后还会有app的加载、分配器的初始化等等，这些全局行为都是只要求进行一次的。当然，各个核的启动也有共通的地方，在这里我们是一个`println!("Hello world")`，在之后的系统中可以是trap的init、时钟中断的开启等等。
 
-因此想法是添加flag来记录是否已经首先进行了全局初始化。首先通过一个flag选出第一个boot的核，让其进行global操作，使稍迟一步的其他核loop等待，直到第一个核完成，修改另一个flag，之后所有核开始共同的boot过程。
+因此我们指定一个`CONTROL_CPU`来进行全局初始化，这里选择CPU0。只有指定CPU能进入Global模块中，而其他核通过`wait_global_init`循环等待一个代表完成的flag，直到第一个核完成，通过`finish_global_init`修改flag，之后所有核开始共同的boot过程。
 
 ```rust
-if select_as_first(){
-    println!("I am FIRST CPU {:x}", cpu_id);
+if cpu_id == CONTROL_CPU{
+    println!("Global initialization start...");
     clear_bss();
     ..
     finish_global_init();
@@ -73,17 +73,11 @@ println!("Hello world from CPU {:x}!", cpu_id);
 boot_finish();
 ```
 
-这里的flag有同步互斥的要求。我们选取的是`AtomicBool`原子变量来实现各个核之间的同步。比如：
+这里的flag有同步互斥的要求。我们选取的是`AtomicBool`原子变量来实现各个核之间的同步：
 
 ```rust
-pub fn select_as_first() -> bool {
-    FIRST_BOOT.compare_exchange(false, true, Ordering::Release, Ordering::Relaxed).is_ok()
-}
-```
+static GLOBAL_INIT: AtomicBool = AtomicBool::new(false);
 
-使用`AtomicBool FIRST_BOOT`，`compare_exchange`的作用尝试让false变为true。对于第一次碰到的核，顺利地exchange了，`is_ok`返回true，于是执行if代码块。而对于之后的核，所得到的`FIRST_BOOT`已经为true，于是并不ok，跳过if代码块。
-
-```rust
 pub fn finish_global_init() {
     GLOBAL_INIT.store(true, Ordering::Relaxed)
 }
@@ -96,7 +90,7 @@ pub fn wait_global_init() {
 }
 ```
 
-这里则是很经典的flag判断，不过值的读写是采用`store`和`load`方法。
+采用`store`和`load`方法进行原子变量的读写操作，保证逻辑的正确性。
 
 ### 正常shutdown
 
@@ -125,11 +119,11 @@ pub fn wait_all_booted() {
 [kernel] Panicked at
 ```
 
-这种“狗尾续貂”的显示。这里采用的做法是预设一个CONTROL_CPU负责总控，仅它进行shutdown，其他核则一直loop。
+这种“狗尾续貂”的显示。这里采用的做法是让`CONTROL_CPU`负责总控，仅它进行shutdown，其他核则一直loop。
 
 ```rust
 if cpu_id == CONTROL_CPU{
-    panic!("Shutdown machine!");
+panic!("Shutdown machine!");
 }
 else { loop{} }
 ```
