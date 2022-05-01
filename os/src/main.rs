@@ -7,6 +7,8 @@
 //!
 //! We then call [`println!`] to display `Hello, world!`.
 
+
+#![deny(warnings)]
 #![no_std]
 #![no_main]
 #![deny(missing_docs)]
@@ -26,11 +28,8 @@ mod config;
 
 global_asm!(include_str!("entry.asm"));
 
-
-static FIRST_BOOT: AtomicBool = AtomicBool::new(false);
 static GLOBAL_INIT: AtomicBool = AtomicBool::new(false);
 static BOOTED_CPU_NUM: AtomicUsize = AtomicUsize::new(0);
-
 
 /// clear BSS segment
 pub fn clear_bss() {
@@ -45,9 +44,8 @@ pub fn clear_bss() {
 #[no_mangle]
 pub fn rust_main() -> ! {
     let cpu_id = harts::id();
-    // 选择最初的核来进行全局初始化
-    if select_as_first(){
-        println!("I am FIRST CPU {:x}", cpu_id);
+    if cpu_id == CONTROL_CPU{
+        println!("Global initialization start...");
         clear_bss();
         extern "C" {
             fn stext();               // begin addr of text segment
@@ -80,11 +78,6 @@ pub fn rust_main() -> ! {
         panic!("Shutdown machine!");
     }
     else { loop{} }
-}
-
-/// select FIRST_CPU
-pub fn select_as_first() -> bool {
-    FIRST_BOOT.compare_exchange(false, true, Ordering::Release, Ordering::Relaxed).is_ok()
 }
 
 /// FIRST_CPU finish global init
