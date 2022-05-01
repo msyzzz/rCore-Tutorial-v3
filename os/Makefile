@@ -81,6 +81,7 @@ ifeq ($(BOARD),qemu)
 		-machine virt \
 		-nographic \
 		-bios $(BOOTLOADER) \
+		-smp $(SMP) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
 else
 	(which $(K210-BURNER)) || (cd .. && git clone https://github.com/sipeed/kflash.py.git && mv kflash.py tools)
