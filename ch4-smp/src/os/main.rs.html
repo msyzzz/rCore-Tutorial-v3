@@ -122,13 +122,6 @@
 <span id="117">117</span>
 <span id="118">118</span>
 <span id="119">119</span>
-<span id="120">120</span>
-<span id="121">121</span>
-<span id="122">122</span>
-<span id="123">123</span>
-<span id="124">124</span>
-<span id="125">125</span>
-<span id="126">126</span>
 </pre><pre class="rust"><code><span class="doccomment">//! The main module and entrypoint</span>
 <span class="doccomment">//!</span>
 <span class="doccomment">//! Various facilities of the kernels are implemented as submodules. The most</span>
@@ -156,7 +149,7 @@
 <span class="kw">use</span> <span class="ident">core::arch::global_asm</span>;
 <span class="kw">use</span> <span class="ident">core::hint::spin_loop</span>;
 <span class="kw">use</span> <span class="ident">core::sync::atomic</span>::{<span class="ident">Ordering</span>, <span class="ident">AtomicBool</span>, <span class="ident">AtomicUsize</span>};
-<span class="kw">use</span> <span class="ident">config</span>::{<span class="ident">CPU_NUM</span>};
+<span class="kw">use</span> <span class="ident">config</span>::{<span class="ident">CPU_NUM</span>, <span class="ident">CONTROL_CPU</span>};
 <span class="kw">extern</span> <span class="kw">crate</span> <span class="ident">alloc</span>;
 
 <span class="attribute">#[<span class="ident">macro_use</span>]</span>
@@ -184,11 +177,8 @@
 <span class="macro">global_asm!</span>(<span class="macro">include_str!</span>(<span class="string">&quot;entry.asm&quot;</span>));
 <span class="macro">global_asm!</span>(<span class="macro">include_str!</span>(<span class="string">&quot;link_app.S&quot;</span>));
 
-
-<span class="kw">static</span> <span class="ident">FIRST_BOOT</span>: <span class="ident">AtomicBool</span> <span class="op">=</span> <span class="ident">AtomicBool::new</span>(<span class="bool-val">false</span>);
 <span class="kw">static</span> <span class="ident">GLOBAL_INIT</span>: <span class="ident">AtomicBool</span> <span class="op">=</span> <span class="ident">AtomicBool::new</span>(<span class="bool-val">false</span>);
 <span class="kw">static</span> <span class="ident">BOOTED_CPU_NUM</span>: <span class="ident">AtomicUsize</span> <span class="op">=</span> <span class="ident">AtomicUsize::new</span>(<span class="number">0</span>);
-
 
 <span class="doccomment">/// clear BSS segment</span>
 <span class="kw">fn</span> <span class="ident">clear_bss</span>() {
@@ -207,7 +197,8 @@
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">rust_main</span>() -&gt; <span class="op">!</span> {
     <span class="kw">let</span> <span class="ident">cpu_id</span> <span class="op">=</span> <span class="ident">harts::id</span>();
     <span class="comment">// 选择最初的核来进行全局初始化</span>
-    <span class="kw">if</span> <span class="ident">select_as_first</span>() {
+    <span class="kw">if</span> <span class="ident">cpu_id</span> <span class="op">==</span> <span class="ident">CONTROL_CPU</span>{
+        <span class="macro">println!</span>(<span class="string">&quot;Global initialization start...&quot;</span>);
         <span class="ident">clear_bss</span>();
         <span class="macro">println!</span>(<span class="string">&quot;[kernel] Hello, world!&quot;</span>);
         <span class="ident">mm::allocator_init</span>();
@@ -225,11 +216,6 @@
     <span class="ident">wait_all_booted</span>();
     <span class="ident">task::run_first_task</span>();
     <span class="macro">panic!</span>(<span class="string">&quot;unreachable&quot;</span>)
-}
-
-<span class="doccomment">/// select FIRST_CPU</span>
-<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">select_as_first</span>() -&gt; <span class="ident">bool</span> {
-    <span class="ident">FIRST_BOOT</span>.<span class="ident">compare_exchange</span>(<span class="bool-val">false</span>, <span class="bool-val">true</span>, <span class="ident">Ordering::Release</span>, <span class="ident">Ordering::Relaxed</span>).<span class="ident">is_ok</span>()
 }
 
 <span class="doccomment">/// FIRST_CPU finish global init</span>
