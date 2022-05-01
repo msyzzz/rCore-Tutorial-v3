@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 use lazy_static::*;
-use crate::sync::UPSafeCell;
+use spin::Mutex;
 use crate::mm::{KERNEL_SPACE, MapPermission, VirtAddr};
 use crate::config::{
     PAGE_SIZE,
@@ -39,9 +39,7 @@ impl PidAllocator {
 }
 
 lazy_static! {
-    static ref PID_ALLOCATOR : UPSafeCell<PidAllocator> = unsafe {
-        UPSafeCell::new(PidAllocator::new())
-    };
+    static ref PID_ALLOCATOR : Mutex<PidAllocator> = Mutex::new(PidAllocator::new());
 }
 
 pub struct PidHandle(pub usize);
@@ -49,12 +47,12 @@ pub struct PidHandle(pub usize);
 impl Drop for PidHandle {
     fn drop(&mut self) {
         //println!("drop pid {}", self.0);
-        PID_ALLOCATOR.exclusive_access().dealloc(self.0);
+        PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }
 
 pub fn pid_alloc() -> PidHandle {
-    PID_ALLOCATOR.exclusive_access().alloc()
+    PID_ALLOCATOR.lock().alloc()
 }
 
 /// Return (bottom, top) of a kernel stack in kernel space.

@@ -1,10 +1,13 @@
 use super::{TaskContext, TaskControlBlock};
 use alloc::sync::Arc;
+use alloc::collections::VecDeque;
 use lazy_static::*;
 use super::{fetch_task, TaskStatus};
 use super::__switch;
 use crate::trap::TrapContext;
-use crate::sync::UPSafeCell;
+use spin::Mutex;
+use crate::config::CPU_NUM;
+use crate::harts::id;
 
 pub struct Processor {
     current: Option<Arc<TaskControlBlock>>,
@@ -30,14 +33,19 @@ impl Processor {
 }
 
 lazy_static! {
-    pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe {
-        UPSafeCell::new(Processor::new())
+    pub static ref PROCESSOR: VecDeque<Mutex<Processor>> = {
+        let mut pro_vec = VecDeque::new();
+        for i in 0..CPU_NUM{
+            pro_vec.push_back(Mutex::new(Processor::new()))
+        }
+        pro_vec
     };
 }
 
 pub fn run_tasks() {
     loop {
-        let mut processor = PROCESSOR.exclusive_access();
+        let cpu_id = id();
+        let mut processor = PROCESSOR[cpu_id].lock();
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
@@ -60,11 +68,11 @@ pub fn run_tasks() {
 }
 
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.exclusive_access().take_current()
+    PROCESSOR[id()].lock().take_current()
 }
 
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.exclusive_access().current()
+    PROCESSOR[id()].lock().current()
 }
 
 pub fn current_user_token() -> usize {
@@ -78,7 +86,7 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
-    let mut processor = PROCESSOR.exclusive_access();
+    let mut processor = PROCESSOR[id()].lock();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
     drop(processor);
     unsafe {

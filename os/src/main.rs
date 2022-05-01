@@ -52,6 +52,7 @@ pub fn rust_main() -> ! {
     let cpu_id = harts::id();
     // 选择最初的核来进行全局初始化
     if select_as_first() {
+        println!("I am cpu {}",cpu_id);
         clear_bss();
         println!("[kernel] Hello, world!");
         mm::allocator_init();

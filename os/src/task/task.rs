@@ -1,19 +1,20 @@
 use crate::mm::{MemorySet, PhysPageNum, KERNEL_SPACE, VirtAddr};
 use crate::trap::{TrapContext, trap_handler};
 use crate::config::TRAP_CONTEXT;
-use crate::sync::UPSafeCell;
+use spin::{Mutex, MutexGuard};
 use core::cell::RefMut;
 use super::TaskContext;
 use super::{PidHandle, pid_alloc, KernelStack};
 use alloc::sync::{Weak, Arc};
 use alloc::vec::Vec;
+use core::borrow::BorrowMut;
 
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
     pub kernel_stack: KernelStack,
     // mutable
-    inner: UPSafeCell<TaskControlBlockInner>,
+    inner: Mutex<TaskControlBlockInner>,
 }
 
 pub struct TaskControlBlockInner {
@@ -48,8 +49,8 @@ impl TaskControlBlockInner {
 }
 
 impl TaskControlBlock {
-    pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
-        self.inner.exclusive_access()
+    pub fn inner_exclusive_access(&self) -> MutexGuard<TaskControlBlockInner> {
+        self.inner.lock()
     }
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
@@ -66,7 +67,7 @@ impl TaskControlBlock {
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
-            inner: unsafe { UPSafeCell::new(TaskControlBlockInner {
+            inner: Mutex::new(TaskControlBlockInner {
                 trap_cx_ppn,
                 base_size: user_sp,
                 task_cx: TaskContext::goto_trap_return(kernel_stack_top),
@@ -75,7 +76,7 @@ impl TaskControlBlock {
                 parent: None,
                 children: Vec::new(),
                 exit_code: 0,
-            })},
+            }),
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
@@ -131,7 +132,7 @@ impl TaskControlBlock {
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
-            inner: unsafe { UPSafeCell::new(TaskControlBlockInner {
+            inner: Mutex::new(TaskControlBlockInner {
                 trap_cx_ppn,
                 base_size: parent_inner.base_size,
                 task_cx: TaskContext::goto_trap_return(kernel_stack_top),
@@ -140,7 +141,7 @@ impl TaskControlBlock {
                 parent: Some(Arc::downgrade(self)),
                 children: Vec::new(),
                 exit_code: 0,
-            })},
+            }),
         });
         // add child
         parent_inner.children.push(task_control_block.clone());
