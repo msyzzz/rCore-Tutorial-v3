@@ -13,7 +13,8 @@
 在ch1中我们搭建的对于不同核要进行不同的行为设定的框架要开始填充本ch的内容了。具体地说，除了clear_bss外，用户程序加载也是只进行一次的任务，而trap初始化和时钟中断、定时器的设置则要每个核自行设定。
 
 ```rust
-if select_as_first(){
+if cpu_id == CONTROL_CPU{
+    println!("Global initialization start...");
     clear_bss();
     loader::load_apps();
     finish_global_init();
