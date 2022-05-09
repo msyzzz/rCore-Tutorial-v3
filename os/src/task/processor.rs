@@ -8,6 +8,7 @@ use crate::trap::TrapContext;
 use spin::Mutex;
 use crate::config::CPU_NUM;
 use crate::harts::id;
+use crate::task::add_task;
 
 pub struct Processor {
     current: Option<Arc<TaskControlBlock>>,
@@ -32,6 +33,7 @@ impl Processor {
     }
 }
 
+// lock each processor, not the vec
 lazy_static! {
     pub static ref PROCESSOR:Vec<Mutex<Processor>> = {
         let mut pro_vec = Vec::new();
@@ -50,7 +52,7 @@ pub fn run_tasks() {
             //println!("cpu {} get task {}", cpu_id, task.pid.0);
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
-            let mut task_inner = task.inner.lock();
+            let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
             drop(task_inner);
@@ -58,18 +60,24 @@ pub fn run_tasks() {
             processor.current = Some(task);
             // release processor manually
             drop(processor);
-            //println!("cpu {} get task drop ok", cpu_id);
             unsafe {
                 __switch(
                     idle_task_cx_ptr,
                     next_task_cx_ptr,
                 );
             }
+            // add task when back to idle
+            let mut processor = PROCESSOR[cpu_id].lock();
+            if let Some(c_task) = processor.take_current() {
+                let inner = c_task.inner_exclusive_access();
+                if inner.task_status == TaskStatus::Ready{
+                    drop(inner);
+                    add_task(c_task);
+                }
+            }
+            drop(processor);
         }
     }
-
-
-
 
 }
 
@@ -83,12 +91,12 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 
 pub fn current_user_token() -> usize {
     let task = current_task().unwrap();
-    let token = task.inner.lock().get_user_token();
+    let token = task.inner_exclusive_access().get_user_token();
     token
 }
 
 pub fn current_trap_cx() -> &'static mut TrapContext {
-    current_task().unwrap().inner.lock().get_trap_cx()
+    current_task().unwrap().inner_exclusive_access().get_trap_cx()
 }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
