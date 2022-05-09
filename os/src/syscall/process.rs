@@ -80,7 +80,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         .iter()
         .enumerate()
         .find(|(_, p)| {
-            // ++++ temporarily access child PCB exclusively
+            // ++++ temporarily access child PCB lock exclusively
             p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid())
             // ++++ release child PCB
         });
