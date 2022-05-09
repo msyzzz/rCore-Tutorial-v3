@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
+#![deny(warnings)]
 
 use core::arch::global_asm;
 use core::hint::spin_loop;
@@ -22,7 +23,6 @@ mod loader;
 mod config;
 mod task;
 mod timer;
-mod sync;
 mod mm;
 mod harts;
 

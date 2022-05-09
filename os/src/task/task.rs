@@ -2,12 +2,10 @@ use crate::mm::{MemorySet, PhysPageNum, KERNEL_SPACE, VirtAddr};
 use crate::trap::{TrapContext, trap_handler};
 use crate::config::TRAP_CONTEXT;
 use spin::{Mutex, MutexGuard};
-use core::cell::RefMut;
 use super::TaskContext;
 use super::{PidHandle, pid_alloc, KernelStack};
 use alloc::sync::{Weak, Arc};
 use alloc::vec::Vec;
-use core::borrow::BorrowMut;
 
 pub struct TaskControlBlock {
     // immutable

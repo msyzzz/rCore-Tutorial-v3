@@ -37,7 +37,7 @@ impl Processor {
 lazy_static! {
     pub static ref PROCESSOR:Vec<Mutex<Processor>> = {
         let mut pro_vec = Vec::new();
-        for i in 0..CPU_NUM{
+        for _ in 0..CPU_NUM{
             pro_vec.push(Mutex::new(Processor::new()))
         }
         pro_vec

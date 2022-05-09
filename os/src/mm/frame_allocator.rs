@@ -1,6 +1,5 @@
 use super::{PhysAddr, PhysPageNum};
 use alloc::vec::Vec;
-use crate::sync::UPSafeCell;
 use spin::Mutex;
 use crate::config::MEMORY_END;
 use lazy_static::*;

@@ -23,12 +23,10 @@ pub use processor::{
 };
 pub use manager::add_task;
 pub use pid::{PidHandle, pid_alloc, KernelStack};
-use crate::harts::id;
 
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
     let task = current_task().unwrap();
-
     // ---- access current TCB exclusively
     let mut task_inner = task.inner_exclusive_access();
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
@@ -54,10 +52,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     inner.exit_code = exit_code;
     for child in inner.children.iter() {
         loop {
-            // 这里把获取子进程的锁放在外层，是因为如果当前进程和子进程都在这个函数里，
-            // 父进程可能拿到 start_proc 的锁，但一定拿不到 child 的锁。
-            // 因为每个进程在进这个函数时都拿着自己的锁，所以此时只有子进程先执行完成，父进程才能继续执行。
-            // 为了防止父进程反复抢 start_proc 的锁又不得不释放，所以把获取子进程的锁放在外层
+            // child first, INITPROC next
             if let Some(mut child_inner) = child.try_inner_access() {
                 if let Some(mut start_proc_tcb_inner) = INITPROC.try_inner_access() {
                     child_inner.parent = Some(Arc::downgrade(&INITPROC));
