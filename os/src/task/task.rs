@@ -14,7 +14,7 @@ pub struct TaskControlBlock {
     pub pid: PidHandle,
     pub kernel_stack: KernelStack,
     // mutable
-    inner: Mutex<TaskControlBlockInner>,
+    pub(crate) inner: Mutex<TaskControlBlockInner>,
 }
 
 pub struct TaskControlBlockInner {
@@ -49,8 +49,11 @@ impl TaskControlBlockInner {
 }
 
 impl TaskControlBlock {
-    pub fn inner_exclusive_access(&self) -> MutexGuard<TaskControlBlockInner> {
-        self.inner.lock()
+    // pub fn inner_exclusive_access(&self) -> MutexGuard<TaskControlBlockInner> {
+    //     self.inner.lock()
+    // }
+    pub fn try_inner_access(&self) ->  Option<MutexGuard<TaskControlBlockInner>>{
+        self.inner.try_lock()
     }
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
@@ -79,7 +82,7 @@ impl TaskControlBlock {
             }),
         };
         // prepare TrapContext in user space
-        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        let trap_cx = task_control_block.inner.lock().get_trap_cx();
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
@@ -98,7 +101,7 @@ impl TaskControlBlock {
             .ppn();
 
         // **** access inner exclusively
-        let mut inner = self.inner_exclusive_access();
+        let mut inner = self.inner.lock();
         // substitute memory_set
         inner.memory_set = memory_set;
         // update trap_cx ppn
@@ -116,7 +119,7 @@ impl TaskControlBlock {
     }
     pub fn fork(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {
         // ---- access parent PCB exclusively
-        let mut parent_inner = self.inner_exclusive_access();
+        let mut parent_inner = self.inner.lock();
         // copy user space(include trap context)
         let memory_set = MemorySet::from_existed_user(
             &parent_inner.memory_set
@@ -147,7 +150,7 @@ impl TaskControlBlock {
         parent_inner.children.push(task_control_block.clone());
         // modify kernel_sp in trap_cx
         // **** access children PCB exclusively
-        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        let trap_cx = task_control_block.inner.lock().get_trap_cx();
         trap_cx.kernel_sp = kernel_stack_top;
         // return
         task_control_block

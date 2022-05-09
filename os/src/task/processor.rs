@@ -1,6 +1,6 @@
 use super::{TaskContext, TaskControlBlock};
 use alloc::sync::Arc;
-use alloc::collections::VecDeque;
+use alloc::vec::Vec;
 use lazy_static::*;
 use super::{fetch_task, TaskStatus};
 use super::__switch;
@@ -33,10 +33,10 @@ impl Processor {
 }
 
 lazy_static! {
-    pub static ref PROCESSOR: VecDeque<Mutex<Processor>> = {
-        let mut pro_vec = VecDeque::new();
+    pub static ref PROCESSOR:Vec<Mutex<Processor>> = {
+        let mut pro_vec = Vec::new();
         for i in 0..CPU_NUM{
-            pro_vec.push_back(Mutex::new(Processor::new()))
+            pro_vec.push(Mutex::new(Processor::new()))
         }
         pro_vec
     };
@@ -45,11 +45,12 @@ lazy_static! {
 pub fn run_tasks() {
     loop {
         let cpu_id = id();
-        let mut processor = PROCESSOR[cpu_id].lock();
         if let Some(task) = fetch_task() {
+            let mut processor = PROCESSOR[cpu_id].lock();
+            //println!("cpu {} get task {}", cpu_id, task.pid.0);
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
-            let mut task_inner = task.inner_exclusive_access();
+            let mut task_inner = task.inner.lock();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
             drop(task_inner);
@@ -57,6 +58,7 @@ pub fn run_tasks() {
             processor.current = Some(task);
             // release processor manually
             drop(processor);
+            //println!("cpu {} get task drop ok", cpu_id);
             unsafe {
                 __switch(
                     idle_task_cx_ptr,
@@ -65,6 +67,10 @@ pub fn run_tasks() {
             }
         }
     }
+
+
+
+
 }
 
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
@@ -77,12 +83,12 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 
 pub fn current_user_token() -> usize {
     let task = current_task().unwrap();
-    let token = task.inner_exclusive_access().get_user_token();
+    let token = task.inner.lock().get_user_token();
     token
 }
 
 pub fn current_trap_cx() -> &'static mut TrapContext {
-    current_task().unwrap().inner_exclusive_access().get_trap_cx()
+    current_task().unwrap().inner.lock().get_trap_cx()
 }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {

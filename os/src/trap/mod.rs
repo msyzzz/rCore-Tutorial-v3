@@ -116,7 +116,8 @@ pub fn trap_return() -> ! {
 
 #[no_mangle]
 pub fn trap_from_kernel() -> ! {
-    panic!("a trap {:?} from kernel!", scause::read().cause());
+    panic!("a trap {:?} from kernel {}!", scause::read().cause(), id());
 }
 
 pub use context::{TrapContext};
+use crate::harts::id;
