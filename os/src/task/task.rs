@@ -19,13 +19,13 @@ pub struct TaskControlBlock {
     pub pid: PidHandle,
     pub kernel_stack: KernelStack,
     // mutable
-    inner: UPSafeCell<TaskControlBlockInner>,
+    inner: Mutex<TaskControlBlockInner>,
 }
 
 pub struct TaskControlBlockInner {
     pub trap_cx_ppn: PhysPageNum,
     pub base_size: usize,
-    pub task_cx_ptr: usize,
+    pub task_cx: TaskContext,
     pub task_status: TaskStatus,
     pub memory_set: MemorySet,
     pub parent: Option<Weak<TaskControlBlock>>,
@@ -81,7 +81,7 @@ impl TaskControlBlock {
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
-            inner: unsafe { UPSafeCell::new(TaskControlBlockInner {
+            inner: Mutex::new(TaskControlBlockInner {
                 trap_cx_ppn,
                 base_size: user_sp,
                 task_cx: TaskContext::goto_trap_return(kernel_stack_top),
@@ -98,14 +98,13 @@ impl TaskControlBlock {
                     // 2 -> stderr
                     Some(Arc::new(Stdout)),
                 ],
-            })},
-        };
+            })};
         // prepare TrapContext in user space
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
+            KERNEL_SPACE.lock().token(),
             kernel_stack_top,
             trap_handler as usize,
         );
@@ -173,8 +172,7 @@ impl TaskControlBlock {
                 children: Vec::new(),
                 exit_code: 0,
                 fd_table: new_fd_table,
-            })},
-        });
+            })},);
         // add child
         parent_inner.children.push(task_control_block.clone());
         // modify kernel_sp in trap_cx

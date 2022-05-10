@@ -22,13 +22,10 @@ mod trap;
 mod config;
 mod task;
 mod timer;
-mod sync;
 mod mm;
 mod harts;
 mod fs;
 mod drivers;
-
-use core::arch::global_asm;
 
 global_asm!(include_str!("entry.asm"));
 
@@ -58,7 +55,6 @@ pub fn rust_main() -> ! {
         clear_bss();
         println!("[kernel] Hello, world!");
         mm::allocator_init();
-        println!("[kernel] back to world!");
         mm::remap_test();
         task::add_initproc();
         println!("after initproc!");
