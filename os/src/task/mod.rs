@@ -32,16 +32,15 @@ pub fn suspend_current_and_run_next() {
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     // Change status to Ready
     task_inner.task_status = TaskStatus::Ready;
-    // println!("cpu {} sus task {}", id(), task.pid.0);
     drop(task_inner);
     // ---- release current PCB
-
-    // push back to ready queue.
     // jump to scheduling cycle
     schedule(task_cx_ptr);
 }
 
 pub fn exit_current_and_run_next(exit_code: i32) {
+    // ++++++ access initproc TCB exclusively
+    let mut initproc_inner = INITPROC.inner_exclusive_access();
     // take from Processor
     let task = take_current_task().unwrap();
     // **** access current TCB exclusively
@@ -50,25 +49,16 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     inner.task_status = TaskStatus::Zombie;
     // Record exit code
     inner.exit_code = exit_code;
+    // do not move to its parent but under initproc
     for child in inner.children.iter() {
-        loop {
-            // child first, INITPROC next
-            if let Some(mut child_inner) = child.try_inner_access() {
-                if let Some(mut start_proc_tcb_inner) = INITPROC.try_inner_access() {
-                    child_inner.parent = Some(Arc::downgrade(&INITPROC));
-                    start_proc_tcb_inner.children.push(child.clone());
-                    // 拿到锁并修改完成后，退到外层循环去修改下一个子进程
-                    break;
-                }
-            }
-            // 只要没拿到任意一个锁，就继续循环
-        }
+        child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
+        initproc_inner.children.push(child.clone());
     }
     inner.children.clear();
     // deallocate user space
     inner.memory_set.recycle_data_pages();
-    // println!("cpu {} exit task {}", id(), task.pid.0);
     drop(inner);
+    drop(initproc_inner);
     // **** release current PCB
     // drop task manually to maintain rc correctly
     drop(task);
