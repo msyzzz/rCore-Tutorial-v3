@@ -51,9 +51,6 @@ impl TaskControlBlock {
     pub fn inner_exclusive_access(&self) -> MutexGuard<TaskControlBlockInner> {
         self.inner.lock()
     }
-    pub fn try_inner_access(&self) ->  Option<MutexGuard<TaskControlBlockInner>>{
-        self.inner.try_lock()
-    }
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
