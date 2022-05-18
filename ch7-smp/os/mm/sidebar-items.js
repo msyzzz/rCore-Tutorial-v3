@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["allocator_init","initiate heap allocator, frame allocator"],["kernel_space_init","initiate kernel space"]],"mod":[["address",""],["frame_allocator",""],["heap_allocator",""],["memory_set",""],["page_table",""]]});
