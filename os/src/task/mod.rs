@@ -27,8 +27,7 @@ pub use signal::{SignalFlags, MAX_SIG};
 
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
-    let task = take_current_task().unwrap();
-
+    let task = current_task().unwrap();
     // ---- access current TCB exclusively
     let mut task_inner = task.inner_exclusive_access();
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
@@ -36,14 +35,13 @@ pub fn suspend_current_and_run_next() {
     task_inner.task_status = TaskStatus::Ready;
     drop(task_inner);
     // ---- release current PCB
-
-    // push back to ready queue.
-    add_task(task);
     // jump to scheduling cycle
     schedule(task_cx_ptr);
 }
 
 pub fn exit_current_and_run_next(exit_code: i32) {
+    // ++++++ access initproc TCB exclusively
+    let mut initproc_inner = INITPROC.inner_exclusive_access();
     // take from Processor
     let task = take_current_task().unwrap();
     // remove from pid2task
@@ -55,23 +53,17 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // Record exit code
     inner.exit_code = exit_code;
     // do not move to its parent but under initproc
-
-    // ++++++ access initproc TCB exclusively
-    {
-        let mut initproc_inner = INITPROC.inner_exclusive_access();
-        for child in inner.children.iter() {
-            child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
-            initproc_inner.children.push(child.clone());
-        }
+    for child in inner.children.iter() {
+        child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
+        initproc_inner.children.push(child.clone());
     }
-    // ++++++ release parent PCB
-
     inner.children.clear();
     // deallocate user space
     inner.memory_set.recycle_data_pages();
     // drop file descriptors
     inner.fd_table.clear();
     drop(inner);
+    drop(initproc_inner);
     // **** release current PCB
     // drop task manually to maintain rc correctly
     drop(task);

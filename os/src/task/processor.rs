@@ -1,10 +1,14 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
-use crate::sync::UPSafeCell;
+use spin::Mutex;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use lazy_static::*;
+use crate::config::CPU_NUM;
+use crate::harts::id;
+use crate::task::add_task;
 
 pub struct Processor {
     current: Option<Arc<TaskControlBlock>>,
@@ -29,13 +33,21 @@ impl Processor {
     }
 }
 
+// lock each processor, not the vec
 lazy_static! {
-    pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
+    pub static ref PROCESSOR:Vec<Mutex<Processor>> = {
+        let mut pro_vec = Vec::new();
+        for _ in 0..CPU_NUM{
+            pro_vec.push(Mutex::new(Processor::new()))
+        }
+        pro_vec
+    };
 }
 
 pub fn run_tasks() {
     loop {
-        let mut processor = PROCESSOR.exclusive_access();
+        let cpu_id = id();
+        let mut processor = PROCESSOR[cpu_id].lock();
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
@@ -48,18 +60,32 @@ pub fn run_tasks() {
             // release processor manually
             drop(processor);
             unsafe {
-                __switch(idle_task_cx_ptr, next_task_cx_ptr);
+                __switch(
+                    idle_task_cx_ptr,
+                    next_task_cx_ptr,
+                );
             }
+            // add task when back to idle
+            let mut processor = PROCESSOR[cpu_id].lock();
+            if let Some(c_task) = processor.take_current() {
+                let inner = c_task.inner_exclusive_access();
+                if inner.task_status == TaskStatus::Ready{
+                    drop(inner);
+                    add_task(c_task);
+                }
+            }
+            drop(processor);
         }
     }
+
 }
 
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.exclusive_access().take_current()
+    PROCESSOR[id()].lock().take_current()
 }
 
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    PROCESSOR.exclusive_access().current()
+    PROCESSOR[id()].lock().current()
 }
 
 pub fn current_user_token() -> usize {
@@ -69,17 +95,17 @@ pub fn current_user_token() -> usize {
 }
 
 pub fn current_trap_cx() -> &'static mut TrapContext {
-    current_task()
-        .unwrap()
-        .inner_exclusive_access()
-        .get_trap_cx()
+    current_task().unwrap().inner_exclusive_access().get_trap_cx()
 }
 
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
-    let mut processor = PROCESSOR.exclusive_access();
+    let mut processor = PROCESSOR[id()].lock();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
     drop(processor);
     unsafe {
-        __switch(switched_task_cx_ptr, idle_task_cx_ptr);
+        __switch(
+            switched_task_cx_ptr,
+            idle_task_cx_ptr,
+        );
     }
 }

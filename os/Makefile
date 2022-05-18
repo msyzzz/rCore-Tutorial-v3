@@ -7,6 +7,7 @@ DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
 SDCARD := /dev/sdb
 APPS := ../user/src/bin/*
+SMP := 4
 
 # BOARD
 BOARD ?= qemu
@@ -41,7 +42,7 @@ build: env switch-check $(KERNEL_BIN) fs-img
 
 switch-check:
 ifeq ($(BOARD), qemu)
-	(which last-qemu) || (rm -f last-k210 && touch last-qemu && make clean)
+	(which last-qemu) || (rm -f last-k210 && touch last-qemu)
 else ifeq ($(BOARD), k210)
 	(which last-k210) || (rm -f last-qemu && touch last-k210 && make clean)
 endif
@@ -92,6 +93,7 @@ ifeq ($(BOARD),qemu)
 		-machine virt \
 		-nographic \
 		-bios $(BOOTLOADER) \
+		-smp $(SMP) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA) \
 		-drive file=$(FS_IMG),if=none,format=raw,id=x0 \
         -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
